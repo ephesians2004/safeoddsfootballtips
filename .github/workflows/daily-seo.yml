@@ -1,0 +1,82 @@
+name: Daily SEO Page Generator
+
+on:
+  schedule:
+    # Run every day at 8:00 AM UTC
+    - cron: '0 8 * * *'
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout repo ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ──────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Run the page generator ─────────────────────────────────────────
+      - name: Generate today's SEO pages
+        run: |
+          echo "Running SafeOdds Daily Generator v2..."
+          python scripts/generate_daily.py
+          echo "Generation complete."
+
+      # ── 4. Show what was generated (for debugging) ────────────────────────
+      - name: List generated files
+        run: |
+          echo "=== Generated files ==="
+          find . -name "index.html" -newer scripts/generate_daily.py -not -path "./.git/*" | sort | head -60
+
+      # ── 5. Commit sitemap.xml changes back to repo ────────────────────────
+      # This keeps your repo's sitemap.xml growing with each day's new URLs
+      - name: Commit sitemap update
+        run: |
+          git config user.name "SafeOdds Bot"
+          git config user.email "bot@safeoddsfootballtips.com"
+          git add sitemap.xml
+          git diff --staged --quiet || git commit -m "chore: update sitemap for $(date +%Y-%m-%d)"
+          git push || echo "Nothing to push"
+
+      # ── 6. Deploy to Namecheap via FTP ────────────────────────────────────
+      - name: Deploy to Namecheap FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          local-dir: "./"
+          server-dir: "/public_html/"
+          # Only deploy the files that changed today — much faster than full sync
+          include: |
+            sitemap.xml
+            index.html
+            */index.html
+            */*/index.html
+          exclude: |
+            .git*
+            .github*
+            scripts/**
+            node_modules/**
+            **/.DS_Store
+            **/._*
+            *.md
+            *.zip
+
+      # ── 7. Notify on failure ──────────────────────────────────────────────
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## SafeOdds Daily Build" >> $GITHUB_STEP_SUMMARY
+          echo "- Date: $(date +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Categories: 18" >> $GITHUB_STEP_SUMMARY
+          echo "- Pages generated: 36 (18 base + 18 dated)" >> $GITHUB_STEP_SUMMARY

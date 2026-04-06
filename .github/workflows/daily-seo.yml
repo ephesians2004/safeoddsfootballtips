@@ -7,6 +7,9 @@ on:
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   generate-and-deploy:
     runs-on: ubuntu-latest
@@ -30,14 +33,13 @@ jobs:
           python scripts/generate_daily.py
           echo "Generation complete."
 
-      # ── 4. Show what was generated (for debugging) ────────────────────────
+      # ── 4. Show what was generated ────────────────────────────────────────
       - name: List generated files
         run: |
           echo "=== Generated files ==="
           find . -name "index.html" -newer scripts/generate_daily.py -not -path "./.git/*" | sort | head -60
 
-      # ── 5. Commit sitemap.xml changes back to repo ────────────────────────
-      # This keeps your repo's sitemap.xml growing with each day's new URLs
+      # ── 5. Commit sitemap.xml back to repo ────────────────────────────────
       - name: Commit sitemap update
         run: |
           git config user.name "SafeOdds Bot"
@@ -55,23 +57,18 @@ jobs:
           password: ${{ secrets.FTP_PASS }}
           local-dir: "./"
           server-dir: "/public_html/"
-          # Only deploy the files that changed today — much faster than full sync
-          include: |
-            sitemap.xml
-            index.html
-            */index.html
-            */*/index.html
           exclude: |
-            .git*
-            .github*
-            scripts/**
-            node_modules/**
+            **/.git*
+            **/.github/**
+            **/scripts/**
+            **/node_modules/**
             **/.DS_Store
             **/._*
-            *.md
-            *.zip
+            **/*.md
+            **/*.zip
+            **/*.py
 
-      # ── 7. Notify on failure ──────────────────────────────────────────────
+      # ── 7. Job summary ────────────────────────────────────────────────────
       - name: Job summary
         if: always()
         run: |
